@@ -2,6 +2,7 @@
 import argparse
 import base64
 import json
+import socket
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib import error, parse, request
 
@@ -28,9 +29,9 @@ def _mcp_tool_def():
                     "type": "string",
                     "description": "Base64-encoded image bytes.",
                 },
-                "layout": {"type": "boolean", "default": False},
-                "reading_order": {"type": "boolean", "default": False},
-                "as_blocks": {"type": "boolean", "default": False},
+                "layout": {"type": "boolean"},
+                "reading_order": {"type": "boolean"},
+                "as_blocks": {"type": "boolean"},
             },
             "required": ["image_base64"],
             "additionalProperties": False,
@@ -163,6 +164,8 @@ class McpHandler(BaseHTTPRequestHandler):
                     "isError": False,
                 },
             )
+        except socket.timeout:
+            msg = f"TurboOCR request timed out after {self.server.ocr_timeout_seconds} seconds"
         except (error.HTTPError, error.URLError) as exc:
             msg = f"TurboOCR request failed: {exc}"
         except ValueError as exc:
