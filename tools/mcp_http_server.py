@@ -267,11 +267,11 @@ class McpHandler(BaseHTTPRequestHandler):
 
         try:
             if name == "turboocr_ocr_image":
-                image_b64 = args.get("image_base64")
                 query = parse.urlencode(_parse_common_flags(args))
                 endpoint = f"{self.server.ocr_base_url}/ocr?{query}"
-                _decode_b64_required(args, "image_base64")
-                payload = json.dumps({"image": image_b64}).encode("utf-8")
+                image_bytes = _decode_b64_required(args, "image_base64")
+                canonical_b64 = base64.b64encode(image_bytes).decode("ascii")
+                payload = json.dumps({"image": canonical_b64}).encode("utf-8")
                 content_type = "application/json"
             elif name == "turboocr_ocr_image_raw":
                 image_bytes = _decode_b64_required(args, "image_bytes_base64")
@@ -328,10 +328,10 @@ class McpHandler(BaseHTTPRequestHandler):
         except socket.timeout:
             timeout = self.server.ocr_timeout_seconds
             msg = f"TurboOCR request timed out after {_timeout_text(timeout)} seconds"
+        except error.HTTPError as exc:
+            msg = f"TurboOCR request failed: {exc}"
         except error.URLError as exc:
-            if isinstance(exc, error.HTTPError):
-                msg = f"TurboOCR request failed: {exc}"
-            elif isinstance(getattr(exc, "reason", None), socket.timeout):
+            if isinstance(getattr(exc, "reason", None), socket.timeout):
                 timeout = self.server.ocr_timeout_seconds
                 msg = f"TurboOCR request timed out after {_timeout_text(timeout)} seconds"
             else:
