@@ -269,8 +269,8 @@ class McpHandler(BaseHTTPRequestHandler):
             if name == "turboocr_ocr_image":
                 query = parse.urlencode(_parse_common_flags(args))
                 endpoint = f"{self.server.ocr_base_url}/ocr?{query}"
-                payload = json.dumps({"image": args.get("image_base64")}).encode("utf-8")
                 _decode_b64_required(args, "image_base64")
+                payload = json.dumps({"image": args.get("image_base64")}).encode("utf-8")
                 content_type = "application/json"
             elif name == "turboocr_ocr_image_raw":
                 image_bytes = _decode_b64_required(args, "image_bytes_base64")
@@ -293,7 +293,11 @@ class McpHandler(BaseHTTPRequestHandler):
                 )
             else:
                 pdf_bytes = _decode_b64_required(args, "pdf_base64")
-                query_args = {"layout": "1", "mode": "auto", "as_blocks": _bool_to_q(bool(args.get("as_blocks", False)))}
+                query_args = {
+                    "layout": _bool_to_q(True),
+                    "mode": "auto",
+                    "as_blocks": _bool_to_q(bool(args.get("as_blocks", False))),
+                }
                 dpi = args.get("dpi")
                 if dpi is not None:
                     query_args["dpi"] = int(dpi)
