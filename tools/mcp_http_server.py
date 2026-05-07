@@ -2,7 +2,6 @@
 import argparse
 import base64
 import json
-import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib import error, parse, request
 
@@ -25,10 +24,6 @@ def _mcp_tool_def():
         "inputSchema": {
             "type": "object",
             "properties": {
-                "image_path": {
-                    "type": "string",
-                    "description": "Absolute or relative path to an image file.",
-                },
                 "image_base64": {
                     "type": "string",
                     "description": "Base64-encoded image bytes.",
@@ -37,7 +32,7 @@ def _mcp_tool_def():
                 "reading_order": {"type": "boolean", "default": False},
                 "as_blocks": {"type": "boolean", "default": False},
             },
-            "anyOf": [{"required": ["image_path"]}, {"required": ["image_base64"]}],
+            "required": ["image_base64"],
             "additionalProperties": False,
         },
     }
@@ -125,14 +120,13 @@ class McpHandler(BaseHTTPRequestHandler):
         if name != "turboocr_ocr_image":
             return _json_rpc_err(req_id, -32602, f"Unknown tool: {name}")
 
-        image_path = args.get("image_path")
         image_b64 = args.get("image_base64")
-        if not image_path and not image_b64:
+        if not image_b64:
             return _json_rpc_ok(
                 req_id,
                 {
                     "isError": True,
-                    "content": [{"type": "text", "text": "Either image_path or image_base64 is required"}],
+                    "content": [{"type": "text", "text": "image_base64 is required"}],
                 },
             )
 
@@ -148,26 +142,15 @@ class McpHandler(BaseHTTPRequestHandler):
         )
 
         try:
-            if image_path:
-                with open(os.path.expanduser(image_path), "rb") as f:
-                    img_bytes = f.read()
-                endpoint = f"{self.server.ocr_base_url}/ocr/raw?{query}"
-                req = request.Request(
-                    endpoint,
-                    data=img_bytes,
-                    headers={"Content-Type": "application/octet-stream"},
-                    method="POST",
-                )
-            else:
-                base64.b64decode(image_b64, validate=True)
-                endpoint = f"{self.server.ocr_base_url}/ocr?{query}"
-                payload = json.dumps({"image": image_b64}).encode("utf-8")
-                req = request.Request(
-                    endpoint,
-                    data=payload,
-                    headers={"Content-Type": "application/json"},
-                    method="POST",
-                )
+            base64.b64decode(image_b64, validate=True)
+            endpoint = f"{self.server.ocr_base_url}/ocr?{query}"
+            payload = json.dumps({"image": image_b64}).encode("utf-8")
+            req = request.Request(
+                endpoint,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
 
             with request.urlopen(req, timeout=self.server.ocr_timeout_seconds) as resp:
                 raw = resp.read().decode("utf-8")
@@ -180,8 +163,6 @@ class McpHandler(BaseHTTPRequestHandler):
                     "isError": False,
                 },
             )
-        except FileNotFoundError:
-            msg = f"File not found: {image_path}"
         except (error.HTTPError, error.URLError) as exc:
             msg = f"TurboOCR request failed: {exc}"
         except ValueError as exc:

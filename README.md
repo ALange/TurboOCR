@@ -186,7 +186,7 @@ Optional flags:
 Exposed MCP tool:
 
 - `turboocr_ocr_image`
-  - Input: either `image_path` or `image_base64`
+  - Input: `image_base64`
   - Optional: `layout`, `reading_order`, `as_blocks`
 
 ### `/ocr/pixels` (zero-decode path)
