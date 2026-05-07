@@ -181,7 +181,7 @@ Optional flags:
 - `--host` MCP bind host (default `127.0.0.1`)
 - `--port` MCP bind port (default `8765`)
 - `--ocr-base-url` TurboOCR HTTP base URL (default `http://127.0.0.1:8000`)
-- `--ocr-timeout-seconds` Timeout for backend OCR requests (default `60`)
+- `--ocr-timeout-seconds` Timeout for backend OCR requests (default `60.0 seconds`)
 
 Exposed MCP tool:
 
