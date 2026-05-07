@@ -153,6 +153,13 @@ def _decode_b64_required(args, field_name):
     return base64.b64decode(encoded, validate=True)
 
 
+def _string_required(args, field_name):
+    value = args.get(field_name)
+    if not value:
+        raise ValueError(f"{field_name} is required")
+    return value
+
+
 def _parse_common_flags(args):
     return {
         "layout": _bool_to_q(bool(args.get("layout", False))),
@@ -267,11 +274,10 @@ class McpHandler(BaseHTTPRequestHandler):
 
         try:
             if name == "turboocr_ocr_image":
+                image_b64 = _string_required(args, "image_base64")
                 query = parse.urlencode(_parse_common_flags(args))
                 endpoint = f"{self.server.ocr_base_url}/ocr?{query}"
-                image_bytes = _decode_b64_required(args, "image_base64")
-                canonical_b64 = base64.b64encode(image_bytes).decode("ascii")
-                payload = json.dumps({"image": canonical_b64}).encode("utf-8")
+                payload = json.dumps({"image": image_b64}).encode("utf-8")
                 content_type = "application/json"
             elif name == "turboocr_ocr_image_raw":
                 image_bytes = _decode_b64_required(args, "image_bytes_base64")
@@ -306,8 +312,6 @@ class McpHandler(BaseHTTPRequestHandler):
                 endpoint = f"{self.server.ocr_base_url}/ocr/pdf?{query}"
                 payload = pdf_bytes
                 content_type = "application/pdf"
-            else:
-                return _json_rpc_err(req_id, -32602, f"Unknown tool: {name}")
 
             req = request.Request(
                 endpoint,
