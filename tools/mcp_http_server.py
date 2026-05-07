@@ -29,9 +29,15 @@ def _mcp_tool_def():
                     "type": "string",
                     "description": "Base64-encoded image bytes.",
                 },
-                "layout": {"type": "boolean"},
-                "reading_order": {"type": "boolean"},
-                "as_blocks": {"type": "boolean"},
+                "layout": {"type": "boolean", "description": "Include layout regions in OCR output."},
+                "reading_order": {
+                    "type": "boolean",
+                    "description": "Include reading-order index for OCR results.",
+                },
+                "as_blocks": {
+                    "type": "boolean",
+                    "description": "Return paragraph/block aggregation fields in response.",
+                },
             },
             "required": ["image_base64"],
             "additionalProperties": False,
@@ -165,7 +171,9 @@ class McpHandler(BaseHTTPRequestHandler):
                 },
             )
         except socket.timeout:
-            msg = f"TurboOCR request timed out after {self.server.ocr_timeout_seconds} seconds"
+            timeout = self.server.ocr_timeout_seconds
+            timeout_text = str(int(timeout)) if float(timeout).is_integer() else str(timeout)
+            msg = f"TurboOCR request timed out after {timeout_text} seconds"
         except (error.HTTPError, error.URLError) as exc:
             msg = f"TurboOCR request failed: {exc}"
         except ValueError as exc:
