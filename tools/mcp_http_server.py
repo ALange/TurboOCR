@@ -170,6 +170,10 @@ class McpHandler(BaseHTTPRequestHandler):
                     "isError": False,
                 },
             )
+        except socket.timeout:
+            timeout = self.server.ocr_timeout_seconds
+            timeout_text = str(int(timeout)) if timeout == int(timeout) else str(timeout)
+            msg = f"TurboOCR request timed out after {timeout_text} seconds"
         except error.URLError as exc:
             if isinstance(getattr(exc, "reason", None), socket.timeout):
                 timeout = self.server.ocr_timeout_seconds
