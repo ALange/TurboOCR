@@ -138,6 +138,10 @@ def _mcp_tool_defs():
     ]
 
 
+TOOL_DEFS = _mcp_tool_defs()
+TOOL_NAMES = {tool["name"] for tool in TOOL_DEFS}
+
+
 def _bool_to_q(v):
     return "1" if v else "0"
 
@@ -155,7 +159,7 @@ def _decode_b64_required(args, field_name):
 
 def _string_required(args, field_name):
     value = args.get(field_name)
-    if not value:
+    if value is None or value == "":
         raise ValueError(f"{field_name} is required")
     return value
 
@@ -257,7 +261,7 @@ class McpHandler(BaseHTTPRequestHandler):
             return
 
         if method == "tools/list":
-            self._send_json(200, _json_rpc_ok(req_id, {"tools": _mcp_tool_defs()}))
+            self._send_json(200, _json_rpc_ok(req_id, {"tools": TOOL_DEFS}))
             return
 
         if method == "tools/call":
@@ -269,7 +273,7 @@ class McpHandler(BaseHTTPRequestHandler):
     def _handle_tool_call(self, req_id, params):
         name = params.get("name")
         args = params.get("arguments") or {}
-        if name not in {tool["name"] for tool in _mcp_tool_defs()}:
+        if name not in TOOL_NAMES:
             return _json_rpc_err(req_id, -32602, f"Unknown tool: {name}")
 
         try:
