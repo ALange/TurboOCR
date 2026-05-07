@@ -49,6 +49,10 @@ def _bool_to_q(v):
     return "1" if v else "0"
 
 
+def _timeout_text(timeout):
+    return str(int(timeout)) if timeout == int(timeout) else str(timeout)
+
+
 class McpHandler(BaseHTTPRequestHandler):
     server_version = "TurboOCRMCP/1.0"
 
@@ -172,13 +176,11 @@ class McpHandler(BaseHTTPRequestHandler):
             )
         except socket.timeout:
             timeout = self.server.ocr_timeout_seconds
-            timeout_text = str(int(timeout)) if timeout == int(timeout) else str(timeout)
-            msg = f"TurboOCR request timed out after {timeout_text} seconds"
+            msg = f"TurboOCR request timed out after {_timeout_text(timeout)} seconds"
         except error.URLError as exc:
             if isinstance(getattr(exc, "reason", None), socket.timeout):
                 timeout = self.server.ocr_timeout_seconds
-                timeout_text = str(int(timeout)) if timeout == int(timeout) else str(timeout)
-                msg = f"TurboOCR request timed out after {timeout_text} seconds"
+                msg = f"TurboOCR request timed out after {_timeout_text(timeout)} seconds"
             else:
                 msg = f"TurboOCR request failed: {exc}"
         except error.HTTPError as exc:
