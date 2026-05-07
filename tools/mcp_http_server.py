@@ -3,6 +3,7 @@ import argparse
 import base64
 import json
 import socket
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib import error, parse, request
 
@@ -18,31 +19,123 @@ def _json_rpc_err(req_id, code, message):
     return {"jsonrpc": "2.0", "id": req_id, "error": {"code": code, "message": message}}
 
 
-def _mcp_tool_def():
-    return {
-        "name": "turboocr_ocr_image",
-        "description": "Run OCR on an image via TurboOCR HTTP API.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "image_base64": {
-                    "type": "string",
-                    "description": "Base64-encoded image bytes.",
+def _mcp_tool_defs():
+    return [
+        {
+            "name": "turboocr_ocr_image",
+            "description": "Image OCR via JSON base64 payload (/ocr).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "image_base64": {
+                        "type": "string",
+                        "description": "Base64-encoded image bytes.",
+                    },
+                    "layout": {"type": "boolean", "description": "Include layout regions in OCR output."},
+                    "reading_order": {
+                        "type": "boolean",
+                        "description": "Include reading-order index for OCR results.",
+                    },
+                    "as_blocks": {
+                        "type": "boolean",
+                        "description": "Return paragraph/block aggregation fields in response.",
+                    },
                 },
-                "layout": {"type": "boolean", "description": "Include layout regions in OCR output."},
-                "reading_order": {
-                    "type": "boolean",
-                    "description": "Include reading-order index for OCR results.",
-                },
-                "as_blocks": {
-                    "type": "boolean",
-                    "description": "Return paragraph/block aggregation fields in response.",
-                },
+                "required": ["image_base64"],
+                "additionalProperties": False,
             },
-            "required": ["image_base64"],
-            "additionalProperties": False,
         },
-    }
+        {
+            "name": "turboocr_ocr_image_raw",
+            "description": "Image OCR via raw image bytes (/ocr/raw). Fastest path.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "image_bytes_base64": {
+                        "type": "string",
+                        "description": "Base64-encoded raw image bytes to forward as request body.",
+                    },
+                    "content_type": {
+                        "type": "string",
+                        "description": "Optional image MIME type, e.g. image/png or image/jpeg.",
+                    },
+                    "layout": {"type": "boolean", "description": "Include layout regions in OCR output."},
+                    "reading_order": {
+                        "type": "boolean",
+                        "description": "Include reading-order index for OCR results.",
+                    },
+                    "as_blocks": {
+                        "type": "boolean",
+                        "description": "Return paragraph/block aggregation fields in response.",
+                    },
+                },
+                "required": ["image_bytes_base64"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "turboocr_ocr_pdf_raw",
+            "description": "PDF OCR via raw PDF bytes (/ocr/pdf).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "pdf_base64": {"type": "string", "description": "Base64-encoded PDF bytes."},
+                    "layout": {"type": "boolean", "description": "Include layout regions in OCR output."},
+                    "as_blocks": {
+                        "type": "boolean",
+                        "description": "Return paragraph/block aggregation fields in response.",
+                    },
+                    "mode": {
+                        "type": "string",
+                        "description": "PDF mode: ocr | geometric | auto | auto_verified",
+                    },
+                    "dpi": {"type": "integer", "description": "PDF render DPI (50-600)."},
+                },
+                "required": ["pdf_base64"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "turboocr_ocr_pdf_multipart",
+            "description": "PDF OCR via multipart/form-data upload (/ocr/pdf).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "pdf_base64": {"type": "string", "description": "Base64-encoded PDF bytes."},
+                    "filename": {"type": "string", "description": "Optional upload filename."},
+                    "layout": {"type": "boolean", "description": "Include layout regions in OCR output."},
+                    "as_blocks": {
+                        "type": "boolean",
+                        "description": "Return paragraph/block aggregation fields in response.",
+                    },
+                    "mode": {
+                        "type": "string",
+                        "description": "PDF mode: ocr | geometric | auto | auto_verified",
+                    },
+                    "dpi": {"type": "integer", "description": "PDF render DPI (50-600)."},
+                },
+                "required": ["pdf_base64"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "turboocr_ocr_pdf_layout_auto",
+            "description": "PDF OCR via raw bytes with layout=1 and mode=auto (/ocr/pdf?layout=1&mode=auto).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "pdf_base64": {"type": "string", "description": "Base64-encoded PDF bytes."},
+                    "as_blocks": {
+                        "type": "boolean",
+                        "description": "Return paragraph/block aggregation fields in response.",
+                    },
+                    "dpi": {"type": "integer", "description": "PDF render DPI (50-600)."},
+                },
+                "required": ["pdf_base64"],
+                "additionalProperties": False,
+            },
+        },
+    ]
 
 
 def _bool_to_q(v):
@@ -51,6 +144,47 @@ def _bool_to_q(v):
 
 def _timeout_text(timeout):
     return str(int(timeout)) if timeout == int(timeout) else str(timeout)
+
+
+def _decode_b64_required(args, field_name):
+    encoded = args.get(field_name)
+    if not encoded:
+        raise ValueError(f"{field_name} is required")
+    return base64.b64decode(encoded, validate=True)
+
+
+def _parse_common_flags(args):
+    return {
+        "layout": _bool_to_q(bool(args.get("layout", False))),
+        "reading_order": _bool_to_q(bool(args.get("reading_order", False))),
+        "as_blocks": _bool_to_q(bool(args.get("as_blocks", False))),
+    }
+
+
+def _parse_pdf_params(args):
+    query = {
+        "layout": _bool_to_q(bool(args.get("layout", False))),
+        "as_blocks": _bool_to_q(bool(args.get("as_blocks", False))),
+    }
+    mode = args.get("mode")
+    if mode:
+        query["mode"] = mode
+    dpi = args.get("dpi")
+    if dpi is not None:
+        query["dpi"] = int(dpi)
+    return query
+
+
+def _multipart_pdf_body(pdf_bytes, filename):
+    boundary = f"----turboocr-mcp-{uuid.uuid4().hex}"
+    head = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
+        "Content-Type: application/pdf\r\n\r\n"
+    ).encode("utf-8")
+    tail = f"\r\n--{boundary}--\r\n".encode("utf-8")
+    body = head + pdf_bytes + tail
+    return body, f"multipart/form-data; boundary={boundary}"
 
 
 class McpHandler(BaseHTTPRequestHandler):
@@ -116,7 +250,7 @@ class McpHandler(BaseHTTPRequestHandler):
             return
 
         if method == "tools/list":
-            self._send_json(200, _json_rpc_ok(req_id, {"tools": [_mcp_tool_def()]}))
+            self._send_json(200, _json_rpc_ok(req_id, {"tools": _mcp_tool_defs()}))
             return
 
         if method == "tools/call":
@@ -128,38 +262,50 @@ class McpHandler(BaseHTTPRequestHandler):
     def _handle_tool_call(self, req_id, params):
         name = params.get("name")
         args = params.get("arguments") or {}
-        if name != "turboocr_ocr_image":
+        if name not in {tool["name"] for tool in _mcp_tool_defs()}:
             return _json_rpc_err(req_id, -32602, f"Unknown tool: {name}")
 
-        image_b64 = args.get("image_base64")
-        if not image_b64:
-            return _json_rpc_ok(
-                req_id,
-                {
-                    "isError": True,
-                    "content": [{"type": "text", "text": "image_base64 is required"}],
-                },
-            )
-
-        layout = bool(args.get("layout", False))
-        reading_order = bool(args.get("reading_order", False))
-        as_blocks = bool(args.get("as_blocks", False))
-        query = parse.urlencode(
-            {
-                "layout": _bool_to_q(layout),
-                "reading_order": _bool_to_q(reading_order),
-                "as_blocks": _bool_to_q(as_blocks),
-            }
-        )
-
         try:
-            base64.b64decode(image_b64, validate=True)
-            endpoint = f"{self.server.ocr_base_url}/ocr?{query}"
-            payload = json.dumps({"image": image_b64}).encode("utf-8")
+            if name == "turboocr_ocr_image":
+                query = parse.urlencode(_parse_common_flags(args))
+                endpoint = f"{self.server.ocr_base_url}/ocr?{query}"
+                payload = json.dumps({"image": args.get("image_base64")}).encode("utf-8")
+                _decode_b64_required(args, "image_base64")
+                content_type = "application/json"
+            elif name == "turboocr_ocr_image_raw":
+                image_bytes = _decode_b64_required(args, "image_bytes_base64")
+                query = parse.urlencode(_parse_common_flags(args))
+                endpoint = f"{self.server.ocr_base_url}/ocr/raw?{query}"
+                payload = image_bytes
+                content_type = args.get("content_type") or "application/octet-stream"
+            elif name == "turboocr_ocr_pdf_raw":
+                pdf_bytes = _decode_b64_required(args, "pdf_base64")
+                query = parse.urlencode(_parse_pdf_params(args))
+                endpoint = f"{self.server.ocr_base_url}/ocr/pdf?{query}"
+                payload = pdf_bytes
+                content_type = "application/pdf"
+            elif name == "turboocr_ocr_pdf_multipart":
+                pdf_bytes = _decode_b64_required(args, "pdf_base64")
+                query = parse.urlencode(_parse_pdf_params(args))
+                endpoint = f"{self.server.ocr_base_url}/ocr/pdf?{query}"
+                payload, content_type = _multipart_pdf_body(
+                    pdf_bytes, args.get("filename") or "document.pdf"
+                )
+            else:
+                pdf_bytes = _decode_b64_required(args, "pdf_base64")
+                query_args = {"layout": "1", "mode": "auto", "as_blocks": _bool_to_q(bool(args.get("as_blocks", False)))}
+                dpi = args.get("dpi")
+                if dpi is not None:
+                    query_args["dpi"] = int(dpi)
+                query = parse.urlencode(query_args)
+                endpoint = f"{self.server.ocr_base_url}/ocr/pdf?{query}"
+                payload = pdf_bytes
+                content_type = "application/pdf"
+
             req = request.Request(
                 endpoint,
                 data=payload,
-                headers={"Content-Type": "application/json"},
+                headers={"Content-Type": content_type},
                 method="POST",
             )
 
@@ -177,14 +323,14 @@ class McpHandler(BaseHTTPRequestHandler):
         except socket.timeout:
             timeout = self.server.ocr_timeout_seconds
             msg = f"TurboOCR request timed out after {_timeout_text(timeout)} seconds"
+        except error.HTTPError as exc:
+            msg = f"TurboOCR request failed: {exc}"
         except error.URLError as exc:
             if isinstance(getattr(exc, "reason", None), socket.timeout):
                 timeout = self.server.ocr_timeout_seconds
                 msg = f"TurboOCR request timed out after {_timeout_text(timeout)} seconds"
             else:
                 msg = f"TurboOCR request failed: {exc}"
-        except error.HTTPError as exc:
-            msg = f"TurboOCR request failed: {exc}"
         except ValueError as exc:
             msg = f"Invalid base64 input: {exc}"
         except Exception as exc:

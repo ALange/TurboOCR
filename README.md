@@ -188,6 +188,18 @@ Exposed MCP tool:
 - `turboocr_ocr_image`
   - Input: `image_base64`
   - Optional: `layout`, `reading_order`, `as_blocks`
+- `turboocr_ocr_image_raw`
+  - Input: `image_bytes_base64` (base64-encoded raw image bytes for `/ocr/raw`)
+  - Optional: `content_type`, `layout`, `reading_order`, `as_blocks`
+- `turboocr_ocr_pdf_raw`
+  - Input: `pdf_base64` (base64-encoded PDF bytes for raw `/ocr/pdf`)
+  - Optional: `layout`, `as_blocks`, `mode`, `dpi`
+- `turboocr_ocr_pdf_multipart`
+  - Input: `pdf_base64` (uploaded to `/ocr/pdf` as `multipart/form-data`)
+  - Optional: `filename`, `layout`, `as_blocks`, `mode`, `dpi`
+- `turboocr_ocr_pdf_layout_auto`
+  - Input: `pdf_base64` (raw bytes to `/ocr/pdf?layout=1&mode=auto`)
+  - Optional: `as_blocks`, `dpi`
 
 ### `/ocr/pixels` (zero-decode path)
 
