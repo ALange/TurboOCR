@@ -292,7 +292,7 @@ class McpHandler(BaseHTTPRequestHandler):
                 payload, content_type = _multipart_pdf_body(
                     pdf_bytes, args.get("filename") or "document.pdf"
                 )
-            else:
+            elif name == "turboocr_ocr_pdf_layout_auto":
                 pdf_bytes = _decode_b64_required(args, "pdf_base64")
                 query_args = {
                     "layout": _bool_to_q(True),
@@ -306,6 +306,8 @@ class McpHandler(BaseHTTPRequestHandler):
                 endpoint = f"{self.server.ocr_base_url}/ocr/pdf?{query}"
                 payload = pdf_bytes
                 content_type = "application/pdf"
+            else:
+                return _json_rpc_err(req_id, -32602, f"Unknown tool: {name}")
 
             req = request.Request(
                 endpoint,
@@ -328,6 +330,7 @@ class McpHandler(BaseHTTPRequestHandler):
         except socket.timeout:
             timeout = self.server.ocr_timeout_seconds
             msg = f"TurboOCR request timed out after {_timeout_text(timeout)} seconds"
+        # HTTPError must be handled before URLError because it subclasses URLError.
         except error.HTTPError as exc:
             msg = f"TurboOCR request failed: {exc}"
         except error.URLError as exc:
