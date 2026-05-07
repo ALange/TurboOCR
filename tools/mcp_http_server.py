@@ -170,11 +170,14 @@ class McpHandler(BaseHTTPRequestHandler):
                     "isError": False,
                 },
             )
-        except socket.timeout:
-            timeout = self.server.ocr_timeout_seconds
-            timeout_text = str(int(timeout)) if float(timeout).is_integer() else str(timeout)
-            msg = f"TurboOCR request timed out after {timeout_text} seconds"
-        except (error.HTTPError, error.URLError) as exc:
+        except error.URLError as exc:
+            if isinstance(getattr(exc, "reason", None), socket.timeout):
+                timeout = self.server.ocr_timeout_seconds
+                timeout_text = str(int(timeout)) if timeout == int(timeout) else str(timeout)
+                msg = f"TurboOCR request timed out after {timeout_text} seconds"
+            else:
+                msg = f"TurboOCR request failed: {exc}"
+        except error.HTTPError as exc:
             msg = f"TurboOCR request failed: {exc}"
         except ValueError as exc:
             msg = f"Invalid base64 input: {exc}"
