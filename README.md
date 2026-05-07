@@ -167,6 +167,28 @@ grpcurl -plaintext -d '{"image":"'$(base64 -w0 doc.png)'"}' \
   localhost:50051 ocr.OCRService/Recognize
 ```
 
+### MCP (HTTP transport)
+
+Use `tools/mcp_http_server.py` to expose TurboOCR as an MCP tool over HTTP:
+
+```bash
+# Start TurboOCR first (HTTP API, default :8000), then start MCP bridge:
+python tools/mcp_http_server.py --host 0.0.0.0 --port 8765
+```
+
+Optional flags:
+
+- `--host` MCP bind host (default `127.0.0.1`)
+- `--port` MCP bind port (default `8765`)
+- `--ocr-base-url` TurboOCR HTTP base URL (default `http://127.0.0.1:8000`)
+- `--ocr-timeout-seconds` Timeout for backend OCR requests (default `60.0 seconds`)
+
+Exposed MCP tool:
+
+- `turboocr_ocr_image`
+  - Input: `image_base64`
+  - Optional: `layout`, `reading_order`, `as_blocks`
+
 ### `/ocr/pixels` (zero-decode path)
 
 For clients that already hold a decoded image in memory (NumPy, OpenCV, custom pipelines), `/ocr/pixels` skips the PNG/JPEG decode step entirely. The body is sent as raw pixel bytes; dimensions travel in HTTP headers.
